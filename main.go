@@ -26,16 +26,14 @@ type Config struct {
 	KeyFile   string   `json:"keyfile"`
 }
 
-// ServerHandlerFunc holds the server and an handler function
-type ServerHandlerFunc struct {
-	handler *func(http.ResponseWriter, *http.Request)
-	server  *Server
-}
-
 // Server the server which contains every information needed
 type Server struct {
-	confing *Config
+	config     *Config
+	workingDir string
+	cache      *cache.Cache
 }
+
+var server *Server
 
 func main() {
 	fmt.Println("Loading Config!")
@@ -66,6 +64,12 @@ func main() {
 	}
 
 	c := cache.NewCache(int64(time.Minute))
+	server = &Server{
+		config:     cnf,
+		workingDir: dir,
+		cache:      c,
+	}
+
 	r := mux.NewRouter()
 
 	r.HandleFunc("/{file:.+}", func(w http.ResponseWriter, r *http.Request) {
@@ -163,4 +167,51 @@ func loadConfig() (*Config, error) {
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
 	return &config, nil
+}
+
+func deliverContent(w http.ResponseWriter, r *http.Request) {
+	f := mux.Vars(r)["file"]
+	logOut(fmt.Sprintf("REQ [%s]", f), r, true)
+
+	deny := true
+	indirName := server.workingDir + f
+	for _, elem := range server.config.Whitelist {
+		matched, _ := filepath.Match(elem, indirName)
+		if matched {
+			deny = false
+		}
+	}
+
+	if deny {
+		logOut(fmt.Sprintf("DEN [%v] 404", f), r, false)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("404 page not found"))
+		return
+	}
+
+	data, err := readContent(f, server.cache)
+	if err == nil {
+		endings := strings.Split(f, ".")
+		if len(endings) > 0 {
+			ending := endings[len(endings)-1]
+			contenttype, exists := TypeMap[ending]
+			if exists {
+				w.Header().Set("Content-Type", contenttype)
+			} else {
+				w.Header().Set("Content-Type", "text/html")
+			}
+		} else {
+			w.Header().Set("Content-Type", "text/html")
+		}
+		w.WriteHeader(http.StatusOK)
+		logOut(fmt.Sprintf("RES [%s] 200", f), r, false)
+		w.Write(data)
+		return
+	}
+
+	logOut(fmt.Sprintf("ERR [%v] 404", err), r, false)
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte("404 page not found"))
 }
