@@ -1,0 +1,10 @@
+{
+    "addr": "127.0.0.1:8080",
+    "workdir": "C:\\Users\\Alt\\Desktop\\website",
+    "whitelist": [
+        "C:\\Users\\Alt\\Desktop\\website\\*"
+    ],
+    "TLS": false,
+    "certfile": "key.crt",
+    "keyfile": "key.pem"
+}
