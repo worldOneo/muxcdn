@@ -64,9 +64,17 @@ func main() {
 	r.HandleFunc("/{file:.+}", deliverContent)
 
 	if server.config.TLS {
-		go http.ListenAndServeTLS(server.config.Addr, server.config.CertFile, server.config.KeyFile, r)
+		fmt.Println("Starting Server with SSL!")
+		go func() {
+			err := http.ListenAndServeTLS(server.config.Addr, server.config.CertFile, server.config.KeyFile, r)
+			fmt.Printf("An Error occured in the SSL Server: %v\n", err)
+		}()
 	} else {
-		go http.ListenAndServe(server.config.Addr, r)
+		fmt.Println("Starting Server!")
+		go func() {
+			err := http.ListenAndServe(server.config.Addr, r)
+			fmt.Printf("An error occured in the Server: %v\n", err)
+		}()
 	}
 
 	fmt.Printf("Server is running on %s!\n", server.config.Addr)
