@@ -48,22 +48,11 @@ func main() {
 		return
 	}
 
-	chDirErr := os.Chdir(cnf.Workdir)
-
-	if chDirErr != nil {
-		fmt.Println("Couldn't changedir into working dir! Stoping server!")
-		return
-	}
-
-	dir, getDirErr := os.Getwd()
+	dir := cnf.Workdir
 	dir += string(os.PathSeparator)
 
-	if getDirErr != nil {
-		fmt.Println("Couldn't get working directory! Stoping server!")
-		return
-	}
-
 	c := cache.NewCache(int64(time.Minute))
+
 	server = &Server{
 		config:     cnf,
 		workingDir: dir,
@@ -72,55 +61,15 @@ func main() {
 
 	r := mux.NewRouter()
 
-	r.HandleFunc("/{file:.+}", func(w http.ResponseWriter, r *http.Request) {
-		f := mux.Vars(r)["file"]
-		logOut(fmt.Sprintf("REQ [%s]", f), r, true)
+	r.HandleFunc("/{file:.+}", deliverContent)
 
-		deny := true
-		indirName := dir + f
-		for _, elem := range cnf.Whitelist {
-			matched, _ := filepath.Match(elem, indirName)
-			if matched {
-				deny = false
-			}
-		}
+	if server.config.TLS {
+		go http.ListenAndServeTLS(server.config.Addr, server.config.CertFile, server.config.KeyFile, r)
+	} else {
+		go http.ListenAndServe(server.config.Addr, r)
+	}
 
-		if deny {
-			logOut(fmt.Sprintf("DEN [%v] 404", f), r, false)
-			w.Header().Set("Content-Type", "text/plain")
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("404 page not found"))
-			return
-		}
-
-		data, err := readContent(f, c)
-		if err == nil {
-			endings := strings.Split(f, ".")
-			if len(endings) > 0 {
-				ending := endings[len(endings)-1]
-				contenttype, exists := TypeMap[ending]
-				if exists {
-					w.Header().Set("Content-Type", contenttype)
-				} else {
-					w.Header().Set("Content-Type", "text/html")
-				}
-			} else {
-				w.Header().Set("Content-Type", "text/html")
-			}
-			w.WriteHeader(http.StatusOK)
-			logOut(fmt.Sprintf("RES [%s] 200", f), r, false)
-			w.Write(data)
-			return
-		}
-
-		logOut(fmt.Sprintf("ERR [%v] 404", err), r, false)
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 page not found"))
-	})
-
-	go http.ListenAndServe(cnf.Addr, r)
-	fmt.Printf("Server is running on %s!\n", cnf.Addr)
+	fmt.Printf("Server is running on %s!\n", server.config.Addr)
 	fmt.Scanln()
 }
 
@@ -190,7 +139,7 @@ func deliverContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := readContent(f, server.cache)
+	data, err := readContent(indirName, server.cache)
 	if err == nil {
 		endings := strings.Split(f, ".")
 		if len(endings) > 0 {
