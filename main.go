@@ -18,7 +18,7 @@ const configFilePath = "muxcdn.conf.json"
 
 // Config The default cdn config
 type Config struct {
-	DefaultFile string   `json:"defaultfil"`
+	DefaultFile string   `json:"defaultfile"`
 	Addr        string   `json:"addr"`
 	Workdir     string   `json:"workdir"`
 	Whitelist   []string `json:"whitelist"`
