@@ -25,7 +25,7 @@ const (
 	TypeiCalendarformat                    = "text/calendar"
 	TypeJavaArchive                        = "application/java-archive"
 	TypeJPEGimages                         = "image/jpeg"
-	TypeJavaScript                         = "text/javascript, per the following specifications:"
+	TypeJavaScript                         = "text/javascript"
 	TypeJSONformat                         = "application/json"
 	TypeJSONLDformat                       = "application/ld+json"
 	TypeMusicalInstrumentDigitalInterface  = "audio/midi"
