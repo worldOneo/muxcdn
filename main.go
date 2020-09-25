@@ -26,6 +26,7 @@ type Config struct {
 	TLS         bool     `json:"TLS"`
 	CertFile    string   `json:"certfile"`
 	KeyFile     string   `json:"keyfile"`
+	RecacheTime int64    `json:"recacheNano"`
 }
 
 // Server the server which contains every information needed
@@ -53,7 +54,7 @@ func main() {
 	dir := cnf.Workdir
 	dir += string(os.PathSeparator)
 
-	c := cache.NewCache(int64(time.Minute))
+	c := cache.NewCache(cnf.RecacheTime)
 
 	server = &Server{
 		config:     cnf,
@@ -117,12 +118,13 @@ func loadConfig() (*Config, error) {
 		config := Config{
 			DefaultFile: "index.html",
 			Addr:        "0.0.0.0:8080",
-			Workdir:     ".",
+			Workdir:     "/var/www/html",
 			Whitelist:   []string{"/var/www/html/*"},
 			Blacklist:   []string{},
 			TLS:         false,
 			KeyFile:     "key.pem",
 			CertFile:    "key.crt",
+			RecacheTime: int64(time.Minute),
 		}
 
 		data, jsonErr := json.MarshalIndent(config, "", "    ")
