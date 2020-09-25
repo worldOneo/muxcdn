@@ -22,6 +22,7 @@ type Config struct {
 	Addr        string   `json:"addr"`
 	Workdir     string   `json:"workdir"`
 	Whitelist   []string `json:"whitelist"`
+	Blacklist   []string `json:"blacklist"`
 	TLS         bool     `json:"TLS"`
 	CertFile    string   `json:"certfile"`
 	KeyFile     string   `json:"keyfile"`
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	if cnf == nil && confErr != nil {
-		fmt.Println("Couldn't create config! Stoping server!")
+		fmt.Println("Couldn't create/load config! Stoping server!")
 		return
 	}
 
@@ -80,7 +81,16 @@ func main() {
 	}
 
 	fmt.Printf("Server is running on %s!\n", server.config.Addr)
-	fmt.Scanln()
+	for true {
+		fmt.Scanln()
+		cnf, confErr = loadConfig()
+		if confErr != nil {
+			fmt.Println("Couldn't reload config!")
+		} else if cnf != nil {
+			server.config = cnf
+			fmt.Println("Reloaded Config!")
+		}
+	}
 }
 
 func readContent(file string, c *cache.Cache) ([]byte, error) {
@@ -109,6 +119,7 @@ func loadConfig() (*Config, error) {
 			Addr:        "0.0.0.0:8080",
 			Workdir:     ".",
 			Whitelist:   []string{"/var/www/html/*"},
+			Blacklist:   []string{},
 			TLS:         false,
 			KeyFile:     "key.pem",
 			CertFile:    "key.crt",
@@ -126,7 +137,11 @@ func loadConfig() (*Config, error) {
 		return &config, err
 	}
 	jsonParser := json.NewDecoder(configFile)
-	jsonParser.Decode(&config)
+	parseErr := jsonParser.Decode(&config)
+
+	if parseErr != nil {
+		return nil, parseErr
+	}
 	return &config, nil
 }
 
@@ -134,16 +149,14 @@ func deliverContent(w http.ResponseWriter, r *http.Request) {
 	f := mux.Vars(r)["file"]
 	logOut(fmt.Sprintf("REQ [%s]", f), r, true)
 
-	deny := true
 	indirName := server.workingDir + f
-	for _, elem := range server.config.Whitelist {
-		matched, _ := filepath.Match(elem, indirName)
-		if matched {
-			deny = false
-		}
+	allow := anyMatch(indirName, server.config.Whitelist)
+
+	if allow {
+		allow = !anyMatch(indirName, server.config.Blacklist)
 	}
 
-	if deny {
+	if !allow {
 		logOut(fmt.Sprintf("DEN [%v] 404", f), r, false)
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusNotFound)
@@ -155,43 +168,61 @@ func deliverContent(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		logOut(fmt.Sprintf("ERR [%v] 404", err), r, false)
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 page not found"))
+		send404(w)
 	}
 }
 
 func deliverDefault(w http.ResponseWriter, r *http.Request) {
 	logOut(fmt.Sprintf("REQ [%s]", "/"), r, true)
 
+	if server.config.DefaultFile == "" {
+		send404(w)
+		return
+	}
+
 	err := sendFile(w, r, server.config.DefaultFile)
 
 	if err != nil {
 		logOut(fmt.Sprintf("ERR [%v] 404", err), r, false)
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 page not found"))
+		send404(w)
 	}
 }
 
 func sendFile(w http.ResponseWriter, r *http.Request, file string) error {
 	data, err := readContent(file, server.cache)
-	if err == nil {
-		endings := strings.Split(file, ".")
-		if len(endings) > 0 {
-			ending := endings[len(endings)-1]
-			contenttype, exists := TypeMap[ending]
-			if exists {
-				w.Header().Set("Content-Type", contenttype)
-			} else {
-				w.Header().Set("Content-Type", "text/html")
-			}
+	if err != nil {
+		return err
+	}
+	endings := strings.Split(file, ".")
+	if len(endings) > 0 {
+		ending := endings[len(endings)-1]
+		contenttype, exists := TypeMap[ending]
+		if exists {
+			w.Header().Set("Content-Type", contenttype)
 		} else {
 			w.Header().Set("Content-Type", "text/html")
 		}
-		w.WriteHeader(http.StatusOK)
-		logOut(fmt.Sprintf("RES [%s] 200", file), r, false)
-		w.Write(data)
+	} else {
+		w.Header().Set("Content-Type", "text/html")
 	}
-	return err
+	w.WriteHeader(http.StatusOK)
+	logOut(fmt.Sprintf("RES [%s] 200", file), r, false)
+	w.Write(data)
+	return nil
+}
+
+func send404(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte("404 page not found"))
+}
+
+func anyMatch(path string, list []string) bool {
+	for _, elem := range list {
+		matched, _ := filepath.Match(elem, path)
+		if matched {
+			return true
+		}
+	}
+	return false
 }
