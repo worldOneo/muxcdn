@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/worldOneo/muxcdn/cache"
+	"github.com/worldOneo/muxcdn/host/cache"
 )
 
 const configFilePath = "muxcdn.conf.json"
